@@ -1,10 +1,7 @@
 import streamlit as st
 import requests
-import base64
-from io import BytesIO
-from PIL import Image
 
-# 1. ESTILOS CSS (FORZANDO VISIBILIDAD)
+# 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS CSS
 st.set_page_config(page_title="Pagantodos", page_icon="🍽️", layout="wide")
 
 st.markdown("""
@@ -12,7 +9,7 @@ st.markdown("""
     .stApp { background-color: #f8fafc; }
     [data-testid="stSidebar"] { background-color: #0f172a !important; }
     
-    /* FORZAR ESTILO DE BOTONES DE PAGO */
+    /* BOTONES DE PAGO ESTILO MERCADO PAGO */
     .stLinkButton a {
         background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%) !important;
         color: white !important;
@@ -22,108 +19,171 @@ st.markdown("""
         text-align: center !important;
         text-decoration: none !important;
         display: block !important;
-        margin-top: 10px !important;
+        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
     }
     
-    .ticket-box {
-        background: white; padding: 20px; border-radius: 20px;
-        border: 1px solid #e2e8f0; border-top: 5px solid #22c55e;
-        color: #1e293b;
-    }
-    
+    /* TARJETAS DE MENÚ */
     .menu-card {
         background: white; padding: 15px; border-radius: 15px;
         display: flex; align-items: center; justify-content: space-between;
         box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 10px;
+        color: #1e293b; border: 1px solid #f1f5f9;
+    }
+    
+    /* CAJA DE TICKET/CUENTA */
+    .ticket-box {
+        background: white; padding: 20px; border-radius: 20px;
+        border-top: 5px solid #22c55e; color: #1e293b;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CREDENCIALES
+# 2. CREDENCIALES (SE LEEN DESDE STREAMLIT CLOUD SECRETS)
 TOKEN_AIRTABLE = st.secrets.get("AIRTABLE_TOKEN", "")
 BASE_ID = st.secrets.get("AIRTABLE_BASE_ID", "")
-MP_TOKEN = st.secrets.get("MP_ACCESS_TOKEN", None) 
+MP_TOKEN = st.secrets.get("MP_ACCESS_TOKEN", "")
 HEADERS_AIRTABLE = {"Authorization": f"Bearer {TOKEN_AIRTABLE}", "Content-Type": "application/json"}
 nro_mesa = st.query_params.get("mesa", "1")
 
-# --- LÓGICA DE PAGO ---
+# 3. FUNCIÓN PARA CREAR LINKS DE PAGO
 def crear_link_pago(titulo, monto):
-    if not MP_TOKEN: return "https://mercadopago.com.ar" # Link de backup
+    if not MP_TOKEN: return "https://www.mercadopago.com.ar"
     try:
         url_mp = "https://api.mercadopago.com/checkout/preferences"
         headers_mp = {"Authorization": f"Bearer {MP_TOKEN}", "Content-Type": "application/json"}
         payload = {
             "items": [{"title": titulo, "quantity": 1, "unit_price": float(monto), "currency_id": "ARS"}],
-            "back_urls": {"success": "https://tu-app.streamlit.app"}, "auto_return": "approved"
+            "back_urls": {"success": "https://share.streamlit.io/"},
+            "auto_return": "approved"
         }
         res = requests.post(url_mp, json=payload, headers=headers_mp, timeout=10)
-        return res.json().get("init_point", "https://mercadopago.com.ar")
-    except: return "https://mercadopago.com.ar"
+        return res.json().get("init_point", "https://www.mercadopago.com.ar")
+    except: return "https://www.mercadopago.com.ar"
 
-# --- SIDEBAR ---
+# 4. SIDEBAR - CONTROL DE ACCESO ADMIN
 with st.sidebar:
-    st.title("PAGANTODOS")
-    modo_admin = st.toggle("🔐 Modo Admin")
-    acceso_concedido = False
+    st.markdown("<h1 style='text-align: center; color: white;'>PAGANTODOS</h1>", unsafe_allow_html=True)
+    
+    if "acceso_admin" not in st.session_state:
+        st.session_state.acceso_admin = False
+    
+    modo_admin = st.toggle("🔐 Modo Administrador")
+    
     if modo_admin:
-        if st.text_input("Clave", type="password") == "pagantodos2026": acceso_concedido = True
-    else: st.success(f"Mesa {nro_mesa}")
-
-# --- VISTA ADMIN ---
-if modo_admin and acceso_concedido:
-    st.write("Panel de control activo")
-    # (Aquí iría la lógica de carga de menú que ya tienes)
-
-# --- VISTA CLIENTE ---
-elif not modo_admin:
-    if 'usuario' not in st.session_state:
-        nombre = st.text_input("Tu nombre")
-        if st.button("ENTRAR"):
-            if nombre: st.session_state.usuario = nombre; st.rerun()
+        if not st.session_state.acceso_admin:
+            clave = st.text_input("Ingresar Clave", type="password")
+            if clave == "pagantodos2026":
+                st.session_state.acceso_admin = True
+                st.rerun()
+            elif clave != "":
+                st.error("Clave incorrecta")
+        else:
+            st.success("Acceso Admin Activo")
+            if st.button("Cerrar Sesión Admin"):
+                st.session_state.acceso_admin = False
+                st.rerun()
     else:
-        # Cargar Menú
+        st.markdown(f"<h3 style='text-align: center; color: #22c55e;'>📍 MESA {nro_mesa}</h3>", unsafe_allow_html=True)
+
+# 5. LÓGICA DE VISTAS (ADMIN vs CLIENTE)
+if modo_admin and st.session_state.acceso_admin:
+    # --- PANEL ADMINISTRADOR ---
+    st.title("⚙️ Panel de Control")
+    tab1, tab2 = st.tabs(["📋 Pedidos en Curso", "🍔 Editar Menú"])
+    
+    with tab1:
+        st.subheader("Órdenes Recibidas")
+        res_p = requests.get(f"https://api.airtable.com/v0/{BASE_ID}/Pedidos", headers=HEADERS_AIRTABLE)
+        pedidos = res_p.json().get('records', [])
+        if not pedidos:
+            st.info("No hay pedidos pendientes.")
+        for p in pedidos:
+            f = p['fields']
+            col1, col2 = st.columns([4, 1])
+            col1.write(f"**Mesa {f.get('Mesa')}** | {f.get('Usuario')}: {f.get('Producto')} (${f.get('Precio')})")
+            if col2.button("Borrar", key=p['id']):
+                requests.delete(f"https://api.airtable.com/v0/{BASE_ID}/Pedidos/{p['id']}", headers=HEADERS_AIRTABLE)
+                st.rerun()
+
+    with tab2:
+        st.subheader("Cargar nuevo ítem al Menú")
+        with st.form("nuevo_item"):
+            p_nom = st.text_input("Nombre del plato/bebida")
+            p_pre = st.number_input("Precio ($)", min_value=0)
+            p_cat = st.selectbox("Categoría", ["Entradas", "Principales", "Bebidas", "Postres"])
+            p_img = st.text_input("URL de la imagen")
+            if st.form_submit_button("Subir a la Carta"):
+                nuevo = {"fields": {"Producto": p_nom, "Precio": p_pre, "Categoria": p_cat, "Imagen_Data": p_img}}
+                requests.post(f"https://api.airtable.com/v0/{BASE_ID}/Menu", headers=HEADERS_AIRTABLE, json=nuevo)
+                st.success("Producto agregado con éxito!")
+                st.rerun()
+
+else:
+    # --- VISTA CLIENTE ---
+    if 'usuario' not in st.session_state:
+        st.header("¡Hola! 👋")
+        nombre = st.text_input("Para empezar, decinos tu nombre:")
+        if st.button("VER CARTA"):
+            if nombre:
+                st.session_state.usuario = nombre
+                st.rerun()
+    else:
+        # Traer menú de Airtable
         res_m = requests.get(f"https://api.airtable.com/v0/{BASE_ID}/Menu", headers=HEADERS_AIRTABLE)
         items = res_m.json().get('records', [])
         
-        cats = sorted(list(set([x['fields'].get('Categoria', 'Varios') for x in items if x['fields'].get('Categoria')])))
-        tabs = st.tabs(cats + ["💳 PAGAR"])
+        categorias = sorted(list(set([x['fields'].get('Categoria', 'Varios') for x in items if x['fields'].get('Categoria')])))
+        tabs = st.tabs(categorias + ["💳 MI CUENTA"])
 
-        for i, cat in enumerate(cats):
+        for i, cat in enumerate(categorias):
             with tabs[i]:
                 for it in [x for x in items if x['fields'].get('Categoria') == cat]:
                     f = it['fields']
-                    st.markdown(f"""<div class="menu-card"><div><b>{f.get('Producto')}</b><br>${f.get('Precio')}</div>
-                    <img src="{f.get('Imagen_Data','')}" width="80" style="border-radius:10px"></div>""", unsafe_allow_html=True)
-                    if st.button(f"PEDIR {f.get('Producto')}", key=it['id']):
-                        requests.post(f"https://api.airtable.com/v0/{BASE_ID}/Pedidos", headers=HEADERS_AIRTABLE, json={"records": [{"fields": {"Usuario": st.session_state.usuario, "Producto": f.get('Producto'), "Precio": float(f.get('Precio', 0)), "Mesa": int(nro_mesa), "Estado": "Pendiente"}}]})
-                        st.toast("Pedido enviado!")
+                    st.markdown(f"""<div class="menu-card">
+                        <div><b>{f.get('Producto')}</b><br><span style='color: #22c55e;'>${f.get('Precio')}</span></div>
+                        <img src="{f.get('Imagen_Data','')}" width="75" style="border-radius:12px; object-fit: cover;">
+                    </div>""", unsafe_allow_html=True)
+                    if st.button(f"Pedir {f.get('Producto')}", key=it['id']):
+                        data = {"fields": {"Usuario": st.session_state.usuario, "Producto": f.get('Producto'), 
+                                         "Precio": float(f.get('Precio', 0)), "Mesa": int(nro_mesa)}}
+                        requests.post(f"https://api.airtable.com/v0/{BASE_ID}/Pedidos", headers=HEADERS_AIRTABLE, json=data)
+                        st.toast(f"¡{f.get('Producto')} pedido correctamente!")
 
-        # --- PESTAÑA DE PAGOS SIN CONDICIONES ---
         with tabs[-1]:
-            res_c = requests.get(f"https://api.airtable.com/v0/{BASE_ID}/Pedidos?filterByFormula=AND(Mesa={nro_mesa},Estado='Pendiente')", headers=HEADERS_AIRTABLE)
+            st.subheader("Resumen de la Mesa")
+            # Filtrar pedidos de la mesa actual
+            res_c = requests.get(f"https://api.airtable.com/v0/{BASE_ID}/Pedidos?filterByFormula=Mesa={nro_mesa}", headers=HEADERS_AIRTABLE)
             pedidos_mesa = res_c.json().get('records', [])
             
-            c1, c2 = st.columns(2)
-            
-            with c1:
+            col_mio, col_todo = st.columns(2)
+            with col_mio:
                 st.markdown("<div class='ticket-box'><h4>👤 MI PARTE</h4>", unsafe_allow_html=True)
                 mios = [x for x in pedidos_mesa if x['fields'].get('Usuario') == st.session_state.usuario]
-                total_mio = sum([float(x['fields'].get('Precio', 0)) for x in mios])
-                for p in mios: st.write(f"- {p['fields'].get('Producto')}")
-                st.write(f"**Total: ${total_mio}**")
+                t_mio = sum([float(x['fields'].get('Precio', 0)) for x in mios])
+                for p in mios: st.write(f"• {p['fields'].get('Producto')} (${p['fields'].get('Precio')})")
+                st.write(f"--- \n**Subtotal: ${t_mio}**")
+                st.link_button("PAGAR MI PARTE", crear_link_pago("Mi parte Pagantodos", t_mio if t_mio > 0 else 1))
                 st.markdown("</div>", unsafe_allow_html=True)
-                
-                # BOTÓN FORZADO: Sin 'if', se tiene que ver sí o sí
-                link_m = crear_link_pago("Mi parte", total_mio if total_mio > 0 else 1)
-                st.link_button("PAGAR MI PARTE 💳", link_m, use_container_width=True)
 
-            with c2:
-                st.markdown("<div class='ticket-box'><h4>👥 LA MESA</h4>", unsafe_allow_html=True)
-                total_mesa = sum([float(x['fields'].get('Precio', 0)) for x in pedidos_mesa])
-                for p in pedidos_mesa: st.write(f"- {p['fields'].get('Usuario')}: {p['fields'].get('Producto')}")
-                st.write(f"**Total: ${total_mesa}**")
+            with col_todo:
+                st.markdown("<div class='ticket-box'><h4>👥 TOTAL MESA</h4>", unsafe_allow_html=True)
+                t_mesa = sum([float(x['fields'].get('Precio', 0)) for x in pedidos_mesa])
+                for p in pedidos_mesa: 
+                    st.write(f"• {p['fields'].get('Usuario')}: {p['fields'].get('Producto')} (${p['fields'].get('Precio')})")
+                st.write(f"--- \n**Total: ${t_mesa}**")
+                st.link_button("PAGAR TODO", crear_link_pago("Total Mesa Pagantodos", t_mesa if t_mesa > 0 else 1))
                 st.markdown("</div>", unsafe_allow_html=True)
-                
-                # BOTÓN FORZADO
-                link_t = crear_link_pago("Total Mesa", total_mesa if total_mesa > 0 else 1)
-                st.link_button("PAGAR TODA LA MESA 💳", link_t, use_container_width=True)
+
+# 6. FOOTER FINAL (FUERA DE TODO CONDICIONAL)
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("---")
+st.markdown(
+    """
+    <div style="text-align: center; color: #64748b; padding: 10px;">
+        <p>Propiedad de <b>Pagantodos 2026</b></p>
+        <p style="font-size: 0.8rem;">Desarrollado para una gestión gastronómica inteligente 🚀</p>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
