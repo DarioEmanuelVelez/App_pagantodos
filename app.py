@@ -11,7 +11,6 @@ st.markdown("""
     .stApp { background-color: #f8fafc; }
     [data-testid="stSidebar"] { background-color: #0f172a !important; }
     
-    /* BOTONES DE PAGO ESTILO MERCADO PAGO */
     .stLinkButton a {
         background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%) !important;
         color: white !important;
@@ -24,7 +23,6 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
     }
     
-    /* TARJETAS DE MENÚ */
     .menu-card {
         background: white; padding: 15px; border-radius: 15px;
         display: flex; align-items: center; justify-content: space-between;
@@ -32,7 +30,6 @@ st.markdown("""
         color: #1e293b; border: 1px solid #f1f5f9;
     }
     
-    /* CAJA DE TICKET/CUENTA */
     .ticket-box {
         background: white; padding: 20px; border-radius: 20px;
         border-top: 5px solid #22c55e; color: #1e293b;
@@ -47,8 +44,9 @@ BASE_ID = st.secrets.get("AIRTABLE_BASE_ID", "")
 MP_TOKEN = st.secrets.get("MP_ACCESS_TOKEN", "")
 HEADERS_AIRTABLE = {"Authorization": f"Bearer {TOKEN_AIRTABLE}", "Content-Type": "application/json"}
 
-# Captura de mesa desde la URL (por defecto mesa 1)
-nro_mesa = st.query_params.get("mesa", "1")
+# Captura de mesa desde la URL (Soporte para celular y PC)
+params = st.query_params
+nro_mesa = params.get("mesa", "1")
 
 # 3. FUNCIONES AUXILIARES
 def crear_link_pago(titulo, monto):
@@ -58,7 +56,7 @@ def crear_link_pago(titulo, monto):
         headers_mp = {"Authorization": f"Bearer {MP_TOKEN}", "Content-Type": "application/json"}
         payload = {
             "items": [{"title": titulo, "quantity": 1, "unit_price": float(monto), "currency_id": "ARS"}],
-            "back_urls": {"success": "https://share.streamlit.io/"},
+            "back_urls": {"success": "https://pagantodos.streamlit.app/"},
             "auto_return": "approved"
         }
         res = requests.post(url_mp, json=payload, headers=headers_mp, timeout=10)
@@ -74,7 +72,7 @@ def generar_qr(url):
     img.save(buf, format="PNG")
     return buf.getvalue()
 
-# 4. SIDEBAR - CONTROL DE ACCESO ADMIN
+# 4. SIDEBAR
 if "acceso_admin" not in st.session_state:
     st.session_state.acceso_admin = False
 
@@ -132,21 +130,18 @@ if modo_admin and st.session_state.acceso_admin:
 
     with tab3:
         st.subheader("Códigos QR por Mesa")
-        n_mesa_gen = st.number_input("Número de Mesa a generar", min_value=1, value=int(nro_mesa), step=1)
+        n_mesa_gen = st.number_input("Número de Mesa a generar", min_value=1, value=2, step=1)
         
-        # AJUSTE PARA EVITAR BLOQUEO DE GITHUB (Separamos la URL)
-        p1 = "https://darioemanuelvelez-app-pagantodos-app-"
-        p2 = "h1v0i4"
-        p3 = ".streamlit.app"
+        # URL REAL ACTUALIZADA
+        base_url = "https://pagantodos.streamlit.app"
+        url_final = f"{base_url}/?mesa={n_mesa_gen}"
         
-        url_final = f"{p1}{p2}{p3}/?mesa={n_mesa_gen}"
-        
-        st.code(url_final)
+        st.info(f"El QR llevará a: {url_final}")
         qr_img = generar_qr(url_final)
         st.image(qr_img, caption=f"QR para Mesa {n_mesa_gen}", width=250)
         
         st.download_button(
-            label="Descargar Imagen QR",
+            label=f"Descargar QR Mesa {n_mesa_gen}",
             data=qr_img,
             file_name=f"QR_Mesa_{n_mesa_gen}.png",
             mime="image/png"
@@ -162,7 +157,6 @@ else:
                 st.session_state.usuario = nombre
                 st.rerun()
     else:
-        # Cargar Menú desde Airtable
         res_m = requests.get(f"https://api.airtable.com/v0/{BASE_ID}/Menu", headers=HEADERS_AIRTABLE)
         items = res_m.json().get('records', [])
         
@@ -207,14 +201,4 @@ else:
                 st.markdown("</div>", unsafe_allow_html=True)
 
 # 7. FOOTER FINAL
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("---")
-st.markdown(
-    """
-    <div style="text-align: center; color: #64748b; padding: 20px;">
-        <p>Propiedad de <b>Pagantodos 2026</b></p>
-        <p style="font-size: 0.8rem;">Hecho con ❤️ para una experiencia gastronómica superior.</p>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+st.markdown("<br><br><hr><div style='text-align: center; color: #64748b; padding: 20px;'>Propiedad de <b>Pagantodos 2026</b></div>", unsafe_allow_html=True)
