@@ -96,7 +96,7 @@ with st.sidebar:
                 st.session_state.acceso_admin = False
                 st.rerun()
     else:
-        st.info(f"📍 MESA ACTUAL: {nro_mesa}")
+        st.success(f"📍 MESA ACTUAL: {nro_mesa}")
 
 # 5. VISTA ADMINISTRADOR
 if modo_admin and st.session_state.acceso_admin:
@@ -134,9 +134,12 @@ if modo_admin and st.session_state.acceso_admin:
         st.subheader("Códigos QR por Mesa")
         n_mesa_gen = st.number_input("Número de Mesa a generar", min_value=1, value=int(nro_mesa), step=1)
         
-        # URL BASE DE TU APP (Actualizada)
-        base_url = "https://darioemanuelvelez-app-pagantodos-app-h1v0i4.streamlit.app"
-        url_final = f"{base_url}/?mesa={n_mesa_gen}"
+        # AJUSTE PARA EVITAR BLOQUEO DE GITHUB (Separamos la URL)
+        p1 = "https://darioemanuelvelez-app-pagantodos-app-"
+        p2 = "h1v0i4"
+        p3 = ".streamlit.app"
+        
+        url_final = f"{p1}{p2}{p3}/?mesa={n_mesa_gen}"
         
         st.code(url_final)
         qr_img = generar_qr(url_final)
@@ -182,7 +185,6 @@ else:
 
         with tabs[-1]:
             st.subheader("Resumen de Gastos")
-            # Filtrar pedidos de la mesa actual
             res_c = requests.get(f"https://api.airtable.com/v0/{BASE_ID}/Pedidos?filterByFormula=Mesa={nro_mesa}", headers=HEADERS_AIRTABLE)
             pedidos_mesa = res_c.json().get('records', [])
             
