@@ -90,4 +90,3 @@ Desarrollado por Darío Emanuel Vélez - 2026
 4.  **Parámetros de URL:** La función `st.query_params` es el motor de los QR. Al leer `?mesa=X`, la app filtra automáticamente todos los pedidos de la base de datos que coincidan con ese número, permitiendo que varios celulares "compartan" la misma mesa.
 
 
-
